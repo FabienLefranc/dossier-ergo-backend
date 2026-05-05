@@ -9,6 +9,7 @@ import dotenv from "dotenv";
 import multer from "multer";
 import fs from "fs";
 import { createServer as createViteServer } from "vite";
+import cors from "cors";
 
 dotenv.config();
 
@@ -136,6 +137,13 @@ async function ensureTables() {
 async function startServer() {
   await ensureTables();
   const app = express();
+ 
+
+// Juste après : const app = express();
+app.use(cors({
+  origin: ['https://assistant-ergo.fr', 'https://www.assistant-ergo.fr'],
+  credentials: true
+}));
   app.use(express.json());
   app.use("/uploads", express.static("uploads"));
 
