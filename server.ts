@@ -141,7 +141,7 @@ async function startServer() {
 
 // Juste après : const app = express();
 app.use(cors({
-  origin: ['https://assistant-ergo.fr', 'https://www.assistant-ergo.fr'],
+  origin: ['https://dossier-ergo.assistant-ergo.fr'],
   credentials: true
 }));
   app.use(express.json());
