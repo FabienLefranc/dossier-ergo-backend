@@ -1,0 +1,153 @@
+{
+  "entities": {
+    "Patient": {
+      "title": "Patient",
+      "description": "Represents a person accompanied by the occupational therapist.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "userId": { "type": "string", "description": "The UID of the OT who owns this patient record." },
+        "firstName": { "type": "string" },
+        "lastName": { "type": "string" },
+        "birthDate": { "type": "string", "format": "date" },
+        "pathology": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "firstName", "lastName"]
+    },
+    "Evaluation": {
+      "title": "Assessment",
+      "description": "A complete occupational therapy assessment for a patient.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "patientId": { "type": "string" },
+        "userId": { "type": "string" },
+        "formData": { "type": "object", "description": "JSON object containing all field values and comments." },
+        "synthesis": { "type": "object", "description": "JSON object containing the AI synthesis result." },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["patientId", "userId", "formData"]
+    },
+    "PchItem": {
+      "title": "PCH Item",
+      "description": "An item in the PCH folder (technical aid, housing adaptation, etc.)",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "patientId": { "type": "string" },
+        "userId": { "type": "string" },
+        "type": { "type": "string", "enum": ["technical_aid", "housing", "vehicle", "other"] },
+        "title": { "type": "string" },
+        "description": { "type": "string" },
+        "status": { "type": "string", "enum": ["draft", "quote_requested", "quote_received", "submitted", "approved", "rejected"] },
+        "notes": { 
+          "type": "array", 
+          "items": {
+            "type": "object",
+            "properties": {
+              "date": { "type": "string", "format": "date-time" },
+              "text": { "type": "string" }
+            }
+          }
+        },
+        "photos": { "type": "array", "items": { "type": "string", "description": "Base64 or URL" } },
+        "argumentairePdf": { "type": "string", "description": "URL or Base64" },
+        "devis1Pdf": { "type": "string", "description": "URL or Base64" },
+        "devis2Pdf": { "type": "string", "description": "URL or Base64" },
+        "financials": {
+          "type": "object",
+          "properties": {
+            "totalCost": { "type": "number" },
+            "pchAmount": { "type": "number" },
+            "fdcRequested": { "type": "boolean" },
+            "fdcAmount": { "type": "number" },
+            "otherAids": { "type": "string" }
+          }
+        },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["patientId", "userId", "type", "title"]
+    },
+    "Document": {
+      "title": "Document Metadata",
+      "description": "Metadata for quotes, arguments, etc.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "patientId": { "type": "string" },
+        "userId": { "type": "string" },
+        "parentId": { "type": "string", "description": "Optional link to a PchItem or Evaluation." },
+        "type": { "type": "string", "enum": ["quote", "argument", "report", "other"] },
+        "title": { "type": "string" },
+        "fileUrl": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["patientId", "userId", "type", "title"]
+    },
+    "CpamItem": {
+      "title": "CpamItem",
+      "description": "Item related to CPAM folder (VPH, Wheelchairs).",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "patientId": { "type": "string" },
+        "category": { "type": "string", "enum": ["vph", "essais", "cerfa"] },
+        "title": { "type": "string" },
+        "description": { "type": "string" },
+        "notes": { 
+          "type": "array", 
+          "items": { "type": "object", "properties": { "date": { "type": "string" }, "text": { "type": "string" } } }
+        },
+        "photos": { "type": "array", "items": { "type": "string" } },
+        "ficheBesoinsPdf": { "type": "string" },
+        "preconisationPdf": { "type": "string" },
+        "devisPdf": { "type": "string" },
+        "status": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["patientId", "userId", "category", "title"]
+    },
+    "Task": {
+      "title": "Task",
+      "description": "A to-do item for a patient.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "patientId": { "type": "string" },
+        "userId": { "type": "string" },
+        "title": { "type": "string" },
+        "completed": { "type": "boolean" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["patientId", "userId", "title"]
+    }
+  },
+  "firestore": {
+    "patients": {
+      "schema": "Patient",
+      "description": "Collection of patient records."
+    },
+    "patients/{patientId}/evaluations": {
+      "schema": "Evaluation",
+      "description": "History of assessments for a patient."
+    },
+    "patients/{patientId}/pchItems": {
+      "schema": "PchItem",
+      "description": "PCH folder items for a patient."
+    },
+    "patients/{patientId}/cpamItems": {
+      "schema": "CpamItem",
+      "description": "Folders and trials for CPAM."
+    },
+    "patients/{patientId}/patientDocuments": {
+      "schema": "Document",
+      "description": "General clinical documents for the patient."
+    },
+    "patients/{patientId}/tasks": {
+      "schema": "Task",
+      "description": "To-do list for a patient."
+    }
+  }
+}
