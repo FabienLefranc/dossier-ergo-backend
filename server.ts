@@ -12,7 +12,11 @@ import { createServer as createViteServer } from "vite";
 import cors from "cors";
 
 dotenv.config();
-
+cloudinary.config({
+  cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
+  api_key: process.env.CLOUDINARY_API_KEY,
+  api_secret: process.env.CLOUDINARY_API_SECRET,
+});
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
@@ -137,6 +141,7 @@ async function ensureTables() {
 async function startServer() {
   await ensureTables();
   const app = express();
+  app.use(cors());
  
 
 // Juste après : const app = express();
