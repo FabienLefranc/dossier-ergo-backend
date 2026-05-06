@@ -1,0 +1,116 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Default deny
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Helper Functions
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    // Entity Validations
+    function isValidPatient(data) {
+      return data.keys().hasAll(['userId', 'firstName', 'lastName', 'createdAt']) 
+             && data.userId is string 
+             && data.firstName is string && data.firstName.size() > 0 && data.firstName.size() <= 100
+             && data.lastName is string && data.lastName.size() > 0 && data.lastName.size() <= 100
+             && (data.get('birthDate', '') is string)
+             && (data.get('pathology', '') is string);
+    }
+
+    function isValidEvaluation(data) {
+      return (data.get('patientId', '') is string)
+             && (data.get('userId', '') is string);
+    }
+
+    function isValidPchItem(data) {
+      return (data.get('patientId', '') is string)
+             && (data.get('userId', '') is string);
+    }
+
+    function isValidDocument(data) {
+      return (data.get('patientId', '') is string)
+             && (data.get('userId', '') is string);
+    }
+
+    function isValidTask(data) {
+      return (data.get('patientId', '') is string)
+             && (data.get('userId', '') is string);
+    }
+
+    function isValidCpamItem(data) {
+      return (data.get('patientId', '') is string)
+             && (data.get('userId', '') is string);
+    }
+
+    // Patients
+    match /patients/{patientId} {
+      allow read, list: if isOwner(existing().userId);
+      allow create: if isOwner(incoming().userId) && isValidPatient(incoming());
+      allow update: if isOwner(existing().userId) && isOwner(incoming().userId) && isValidPatient(incoming());
+      allow delete: if isOwner(existing().userId);
+
+      // Sub-collections
+      match /evaluations/{evalId} {
+        allow read, list: if isOwner(get(/databases/$(database)/documents/patients/$(patientId)).data.userId);
+        allow create: if isOwner(incoming().userId) && isValidEvaluation(incoming());
+        allow update: if isOwner(existing().userId) && isValidEvaluation(incoming());
+        allow delete: if isOwner(existing().userId);
+      }
+
+      match /documents/{docId} {
+        allow read, list: if isOwner(get(/databases/$(database)/documents/patients/$(patientId)).data.userId);
+        allow create: if isOwner(incoming().userId) && isValidDocument(incoming());
+        allow update: if isOwner(existing().userId) && isValidDocument(incoming());
+        allow delete: if isOwner(existing().userId);
+      }
+
+      match /tasks/{taskId} {
+        allow read, list: if isOwner(get(/databases/$(database)/documents/patients/$(patientId)).data.userId);
+        allow create: if isOwner(incoming().userId) && isValidTask(incoming());
+        allow update: if isOwner(existing().userId) && isValidTask(incoming());
+        allow delete: if isOwner(existing().userId);
+      }
+
+      match /pchItems/{itemId} {
+        allow read, list: if isOwner(get(/databases/$(database)/documents/patients/$(patientId)).data.userId);
+        allow create: if isOwner(incoming().userId) && isValidPchItem(incoming());
+        allow update: if isOwner(existing().userId) && isValidPchItem(incoming());
+        allow delete: if isOwner(existing().userId);
+      }
+
+      match /cpamItems/{itemId} {
+        allow read, list: if isOwner(get(/databases/$(database)/documents/patients/$(patientId)).data.userId);
+        allow create: if isOwner(incoming().userId) && isValidCpamItem(incoming());
+        allow update: if isOwner(existing().userId) && isValidCpamItem(incoming());
+        allow delete: if isOwner(existing().userId);
+      }
+
+      match /patientDocuments/{docId} {
+        allow read, list: if isOwner(get(/databases/$(database)/documents/patients/$(patientId)).data.userId);
+        allow create: if isOwner(incoming().userId) && isValidDocument(incoming());
+        allow update: if isOwner(existing().userId) && isValidDocument(incoming());
+        allow delete: if isOwner(existing().userId);
+      }
+    }
+  }
+}

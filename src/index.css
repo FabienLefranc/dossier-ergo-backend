@@ -1,0 +1,8 @@
+@import "tailwindcss";
+
+@theme {
+  --color-apf-blue: #23526d;
+  --color-apf-blue-dark: #1a3d52;
+  --color-apf-orange: #f99d1c;
+  --color-apf-orange-dark: #e08b10;
+}
