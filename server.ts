@@ -9,18 +9,21 @@ import dotenv from "dotenv";
 import multer from "multer";
 import fs from "fs";
 import { createServer as createViteServer } from "vite";
-import { v2 as cloudinary } from 'cloudinary';
+import cors from "cors";
+import { v2 as cloudinary } from "cloudinary";
 
 dotenv.config();
+
 cloudinary.config({
   cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
   api_key: process.env.CLOUDINARY_API_KEY,
   api_secret: process.env.CLOUDINARY_API_SECRET,
 });
+
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-const PORT = 3000;
+const PORT = process.env.PORT || 3000;
 const JWT_SECRET = process.env.JWT_SECRET || "default_secret_fallback";
 
 // Ensure uploads directory exists
@@ -54,14 +57,11 @@ if (useMySQL) {
 async function dbQuery(sql: string, params: any[] = []) {
   if (useMySQL) {
     const [rows] = await pool.execute(sql, params);
-    // Pour MySQL, rows est soit un tableau de lignes (SELECT), soit un objet ResultSetHeader (INSERT/UPDATE/DELETE)
-    // Pour SQLite, on retourne toujours un tableau. On va normaliser pour que non-SELECT retourne un tableau d'un objet.
     if (!sql.trim().toUpperCase().startsWith("SELECT") && !Array.isArray(rows)) {
       return [rows];
     }
     return rows;
   } else {
-    // Map MySQL placeholders (?) to better-sqlite3 logic
     if (sql.trim().toUpperCase().startsWith("SELECT")) {
       return sqliteDb.prepare(sql).all(...params);
     } else {
@@ -136,11 +136,13 @@ async function ensureTables() {
   }
 }
 
-// ... rests of the file with pool.execute replaced by dbQuery
-
 async function startServer() {
   await ensureTables();
   const app = express();
+
+  // CORS — autoriser toutes les origines
+  app.use(cors());
+
   app.use(express.json());
   app.use("/uploads", express.static("uploads"));
 
@@ -159,11 +161,11 @@ async function startServer() {
     },
   });
   const upload = multer({ storage: storage });
+
   // Diagnostic route
   app.get("/api/db-health", async (req, res) => {
     try {
       if (useMySQL) {
-        console.log("Checking MySQL connection to:", process.env.MYSQL_HOST);
         const connection = await pool.getConnection();
         await connection.query("SELECT 1");
         connection.release();
@@ -185,9 +187,6 @@ async function startServer() {
         status: "error", 
         message: error.message, 
         code: error.code,
-        errno: error.errno,
-        sqlState: error.sqlState,
-        hint: "Vérifiez que vos identifiants sont CORRECTS dans le menu 'Settings > Secrets' de AI Studio. Si vous voyez 'ETIMEDOUT', c'est que Hostinger bloque la connexion : vous devez autoriser l'IP de ce serveur dans 'Remote MySQL' sur Hostinger (ou mettre '%' pour tester)."
       });
     }
   });
@@ -197,7 +196,6 @@ async function startServer() {
     const token = authHeader && authHeader.split(" ")[1];
     
     if (!token || token === 'dev-token') {
-      // Pour un usage monoposte, on bypass et on utilise l'ID 1
       req.user = { id: 1, email: 'fabien.lefranc16@gmail.com' };
       return next();
     }
@@ -259,14 +257,10 @@ async function startServer() {
   app.post("/api/patients", authenticateToken, async (req: any, res) => {
     const { firstName, lastName, birthDate, pathology } = req.body;
     try {
-      console.log("Tentative d'ajout de patient:", { firstName, lastName, userId: req.user.id });
       const sql = "INSERT INTO patients (user_id, first_name, last_name, birth_date, pathology) VALUES (?, ?, ?, ?, ?)";
       const params = [req.user.id, firstName, lastName, birthDate || null, pathology];
-      
       const result: any = await dbQuery(sql, params);
       const insertId = result[0]?.insertId;
-      
-      console.log("Patient ajouté avec succès, ID:", insertId);
       res.json({ id: insertId, ...req.body });
     } catch (error: any) {
       console.error("Erreur base de données lors de l'ajout du patient:", error);
@@ -354,12 +348,12 @@ async function startServer() {
     }
   });
 
-  // Generic Data Route (for specialized forms like Mdph, Cpam)
+  // Generic Data Route (for MDPH, CPAM, Documents, Assessment forms)
   app.get("/api/patients/:patientId/data/:type", authenticateToken, async (req: any, res) => {
     try {
       const rows: any = await dbQuery(
         "SELECT * FROM assessments WHERE patient_id = ? AND user_id = ? AND assessment_type = ?",
-        [req.params.patientId, req.user.id,req.params.type]
+        [req.params.patientId, req.user.id, req.params.type]
       );
       if (rows.length === 0) return res.json(null);
       const row = rows[0];
@@ -396,25 +390,40 @@ async function startServer() {
     }
   });
 
-  // File Upload Route
+  // File Upload Route — via Cloudinary (PDF, photos, documents)
   app.post("/api/upload", authenticateToken, upload.single("file"), async (req: any, res) => {
-  if (!req.file) return res.status(400).json({ error: "No file uploaded" });
-  
-  try {
-    const result = await cloudinary.uploader.upload(req.file.path, {
-      folder: "dossier-ergo",
-      resource_type: "auto" // accepte PDF et images
+    if (!req.file) return res.status(400).json({ error: "No file uploaded" });
+    
+    try {
+      const result = await cloudinary.uploader.upload(req.file.path, {
+        folder: "dossier-ergo",
+        resource_type: "auto"
+      });
+      
+      // Supprime le fichier temporaire local
+      fs.unlinkSync(req.file.path);
+      
+      res.json({ url: result.secure_url });
+    } catch (error: any) {
+      console.error("Cloudinary upload error:", error);
+      res.status(500).json({ error: "Upload failed" });
+    }
+  });
+
+  // --- Vite / Production Serving ---
+  if (process.env.NODE_ENV !== "production") {
+    const vite = await createViteServer({
+      server: { middlewareMode: true },
+      appType: "spa",
     });
-    
-    // Supprime le fichier temporaire local
-    fs.unlinkSync(req.file.path);
-    
-    res.json({ url: result.secure_url });
-  } catch (error: any) {
-    console.error("Cloudinary upload error:", error);
-    res.status(500).json({ error: "Upload failed" });
+    app.use(vite.middlewares);
+  } else {
+    const distPath = path.join(process.cwd(), "dist");
+    app.use(express.static(distPath));
+    app.get("*", (req, res) => {
+      res.sendFile(path.join(distPath, "index.html"));
+    });
   }
-});
 
   app.listen(PORT, "0.0.0.0", () => {
     console.log(`Server running on http://localhost:${PORT}`);
