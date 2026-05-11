@@ -153,7 +153,6 @@ async function startServer() {
   });
   const upload = multer({ storage: storage });
 
-  // Health check
   app.get("/api/db-health", async (req, res) => {
     try {
       if (useMySQL) {
@@ -184,7 +183,6 @@ async function startServer() {
     });
   };
 
-  // Auth
   app.post("/api/auth/register", async (req, res) => {
     const { email, password, name } = req.body;
     try {
@@ -212,7 +210,6 @@ async function startServer() {
     }
   });
 
-  // Patients
   app.get("/api/patients", authenticateToken, async (req: any, res) => {
     try {
       const rows = await dbQuery("SELECT * FROM patients WHERE user_id = ? ORDER BY created_at DESC", [req.user.id]);
@@ -235,7 +232,6 @@ async function startServer() {
     }
   });
 
-  // Tasks
   app.get("/api/patients/:patientId/tasks", authenticateToken, async (req: any, res) => {
     try {
       const rows = await dbQuery("SELECT * FROM tasks WHERE patient_id = ? AND user_id = ?", [req.params.patientId, req.user.id]);
@@ -277,7 +273,6 @@ async function startServer() {
     }
   });
 
-  // Assessments
   app.get("/api/patients/:patientId/assessments", authenticateToken, async (req: any, res) => {
     try {
       const rows = await dbQuery("SELECT * FROM assessments WHERE patient_id = ? AND user_id = ?", [req.params.patientId, req.user.id]);
@@ -300,7 +295,6 @@ async function startServer() {
     }
   });
 
-  // Generic Data Route (MDPH, CPAM, Documents, Evaluations)
   app.get("/api/patients/:patientId/data/:type", authenticateToken, async (req: any, res) => {
     try {
       const rows: any = await dbQuery(
@@ -338,15 +332,21 @@ async function startServer() {
     }
   });
 
-  // File Upload — Cloudinary (PDF en "raw", images en "image")
+  // File Upload — Cloudinary (UNE SEULE ROUTE)
   app.post("/api/upload", authenticateToken, upload.single("file"), async (req: any, res) => {
     if (!req.file) return res.status(400).json({ error: "No file uploaded" });
     try {
       const isPdf = req.file.mimetype === 'application/pdf';
+      console.log("Upload reçu - mimetype:", req.file.mimetype, "isPdf:", isPdf);
+      
       const result = await cloudinary.uploader.upload(req.file.path, {
         folder: "dossier-ergo",
         resource_type: isPdf ? "raw" : "image"
       });
+      
+      console.log("Cloudinary URL:", result.secure_url);
+      console.log("Cloudinary resource_type:", result.resource_type);
+      
       fs.unlinkSync(req.file.path);
       res.json({ url: result.secure_url });
     } catch (error: any) {
@@ -354,28 +354,7 @@ async function startServer() {
       res.status(500).json({ error: "Upload failed" });
     }
   });
-  // File Upload — Cloudinary
-app.post("/api/upload", authenticateToken, upload.single("file"), async (req: any, res) => {
-  if (!req.file) return res.status(400).json({ error: "No file uploaded" });
-  try {
-    const isPdf = req.file.mimetype === 'application/pdf';
-    const result = await cloudinary.uploader.upload(req.file.path, {
-      folder: "dossier-ergo",
-      resource_type: isPdf ? "raw" : "image"
-    });
-    
-    // LOG TEMPORAIRE
-    console.log("Cloudinary result:", JSON.stringify(result, null, 2));
-    
-    fs.unlinkSync(req.file.path);
-    res.json({ url: result.secure_url });
-  } catch (error: any) {
-    console.error("Cloudinary upload error:", error);
-    res.status(500).json({ error: "Upload failed" });
-  }
-});
 
-  // Vite / Production
   if (process.env.NODE_ENV !== "production") {
     const vite = await createViteServer({
       server: { middlewareMode: true },
