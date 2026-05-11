@@ -354,6 +354,26 @@ async function startServer() {
       res.status(500).json({ error: "Upload failed" });
     }
   });
+  // File Upload — Cloudinary
+app.post("/api/upload", authenticateToken, upload.single("file"), async (req: any, res) => {
+  if (!req.file) return res.status(400).json({ error: "No file uploaded" });
+  try {
+    const isPdf = req.file.mimetype === 'application/pdf';
+    const result = await cloudinary.uploader.upload(req.file.path, {
+      folder: "dossier-ergo",
+      resource_type: isPdf ? "raw" : "image"
+    });
+    
+    // LOG TEMPORAIRE
+    console.log("Cloudinary result:", JSON.stringify(result, null, 2));
+    
+    fs.unlinkSync(req.file.path);
+    res.json({ url: result.secure_url });
+  } catch (error: any) {
+    console.error("Cloudinary upload error:", error);
+    res.status(500).json({ error: "Upload failed" });
+  }
+});
 
   // Vite / Production
   if (process.env.NODE_ENV !== "production") {
