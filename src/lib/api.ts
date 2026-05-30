@@ -60,6 +60,18 @@ export const api = {
         throw new Error(err.error || 'Failed to create patient');
       }
       return res.json();
+    },
+    update: async (id: string, data: { firstName: string; lastName: string; birthDate: string; pathology: string }) => {
+      const res = await fetch(`${API_URL}/api/patients/${id}`, {
+        method: 'PATCH',
+        headers: getHeaders(),
+        body: JSON.stringify(data)
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ error: 'Unknown error' }));
+        throw new Error(err.error || 'Failed to update patient');
+      }
+      return res.json();
     }
   },
  

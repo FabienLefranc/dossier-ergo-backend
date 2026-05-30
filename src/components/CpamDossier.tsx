@@ -144,6 +144,12 @@ export default function CpamDossier({ patientId, userId }: CpamDossierProps) {
     setItems(prev => prev.map(i => i.id === itemId ? { ...i, ...updates } : i));
   };
 
+  const removePdf = async (itemId: string, field: keyof CpamItem) => {
+    if (!confirm('Supprimer ce document ?')) return;
+    const newItems = items.map(i => i.id === itemId ? { ...i, [field]: '' } : i);
+    await saveItems(newItems);
+  };
+
   const removePhoto = async (item: CpamItem, photoUrl: string) => {
     const photos = item.photos.filter(p => p !== photoUrl);
     const newItems = items.map(i => i.id === item.id ? { ...i, photos } : i);
@@ -320,20 +326,28 @@ export default function CpamDossier({ patientId, userId }: CpamDossierProps) {
                                 <div className="flex flex-col items-center">
                                   <span className="text-xs font-bold text-slate-600 uppercase tracking-tight">{docItem.label}</span>
                                   {isExisting && (
-                                    <a href={item[docItem.key] as string} target="_blank" rel="noreferrer" className="text-[10px] text-apf-blue hover:underline mt-1 font-bold">
-                                      VOIR LE PDF
-                                    </a>
+                                    <div className="flex flex-col items-center gap-1 mt-1">
+                                      <a href={item[docItem.key] as string} target="_blank" rel="noreferrer" className="text-[10px] text-apf-blue hover:underline font-bold">
+                                        VOIR LE PDF
+                                      </a>
+                                      <button
+                                        onClick={(e) => { e.stopPropagation(); removePdf(item.id, docItem.key); }}
+                                        className="text-[10px] text-rose-500 hover:underline font-bold flex items-center gap-1"
+                                      >
+                                        <Trash2 className="w-3 h-3" /> SUPPRIMER
+                                      </button>
+                                    </div>
                                   )}
                                 </div>
                                 <input 
                                   type="file" 
                                   accept=".pdf"
-                                  className="absolute inset-0 opacity-0 cursor-pointer" 
+                                  className={`absolute inset-0 opacity-0 ${isExisting ? 'hidden' : 'cursor-pointer'}`}
                                   onChange={(e) => {
                                     const file = e.target.files?.[0];
                                     if (file) handleFileUpload(item.id, docItem.key, file);
                                   }}
-                                  disabled={!!uploading}
+                                  disabled={!!uploading || !!isExisting}
                                 />
                               </div>
                             );

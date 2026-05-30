@@ -26,13 +26,11 @@ const __dirname = path.dirname(__filename);
 const PORT = process.env.PORT || 3000;
 const JWT_SECRET = process.env.JWT_SECRET || "default_secret_fallback";
 
-// Ensure uploads directory exists
 const uploadsDir = path.join(__dirname, "uploads");
 if (!fs.existsSync(uploadsDir)) {
   fs.mkdirSync(uploadsDir, { recursive: true });
 }
 
-// --- Database Setup ---
 let pool: any = null;
 let sqliteDb: any = null;
 const useMySQL = !!process.env.MYSQL_HOST;
@@ -50,7 +48,7 @@ if (useMySQL) {
     queueLimit: 0,
   });
 } else {
-  console.log("Using SQLite database (better-sqlite3)...");
+  console.log("Using SQLite database...");
   sqliteDb = new Database("./database.sqlite");
 }
 
@@ -75,7 +73,6 @@ async function dbQuery(sql: string, params: any[] = []) {
 async function ensureTables() {
   try {
     console.log("Vérification/Création des tables...");
-    
     const queries = [
       `CREATE TABLE IF NOT EXISTS users (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -126,13 +123,12 @@ async function ensureTables() {
 
     const rows: any = await dbQuery("SELECT id FROM users WHERE id = 1");
     if (rows.length === 0) {
-      console.log("Création de l'utilisateur par défaut...");
       await dbQuery(
         "INSERT INTO users (id, email, password, name) VALUES (1, 'fabien.lefranc16@gmail.com', 'dummy_pass', 'Fabien')",
       );
     }
   } catch (err) {
-    console.error("Erreur lors de l'initialisation de la base de données :", err);
+    console.error("Erreur initialisation BDD :", err);
   }
 }
 
@@ -140,19 +136,14 @@ async function startServer() {
   await ensureTables();
   const app = express();
 
-  // CORS — autoriser toutes les origines
   app.use(cors());
-
   app.use(express.json());
   app.use("/uploads", express.static("uploads"));
 
-  // Multer Storage Configuration
   const storage = multer.diskStorage({
     destination: function (req, file, cb) {
       const dir = "./uploads";
-      if (!fs.existsSync(dir)) {
-        fs.mkdirSync(dir);
-      }
+      if (!fs.existsSync(dir)) fs.mkdirSync(dir);
       cb(null, dir);
     },
     filename: function (req, file, cb) {
@@ -162,44 +153,30 @@ async function startServer() {
   });
   const upload = multer({ storage: storage });
 
-  // Diagnostic route
+  // Health check
   app.get("/api/db-health", async (req, res) => {
     try {
       if (useMySQL) {
         const connection = await pool.getConnection();
         await connection.query("SELECT 1");
         connection.release();
-        res.json({ 
-          status: "ok", 
-          database: "MySQL", 
-          host: process.env.MYSQL_HOST,
-          user: process.env.MYSQL_USER,
-          db: process.env.MYSQL_DATABASE,
-          port: process.env.MYSQL_PORT 
-        });
+        res.json({ status: "ok", database: "MySQL", host: process.env.MYSQL_HOST, user: process.env.MYSQL_USER, db: process.env.MYSQL_DATABASE, port: process.env.MYSQL_PORT });
       } else {
         sqliteDb.prepare("SELECT 1").get();
         res.json({ status: "ok", database: "SQLite" });
       }
     } catch (error: any) {
-      console.error("Health check failed:", error);
-      res.status(500).json({ 
-        status: "error", 
-        message: error.message, 
-        code: error.code,
-      });
+      res.status(500).json({ status: "error", message: error.message, code: error.code });
     }
   });
 
   const authenticateToken = (req: any, res: any, next: any) => {
     const authHeader = req.headers["authorization"];
     const token = authHeader && authHeader.split(" ")[1];
-    
     if (!token || token === 'dev-token') {
       req.user = { id: 1, email: 'fabien.lefranc16@gmail.com' };
       return next();
     }
-
     jwt.verify(token, JWT_SECRET, (err: any, user: any) => {
       if (err) return res.sendStatus(403);
       req.user = user;
@@ -207,22 +184,15 @@ async function startServer() {
     });
   };
 
-  // --- API Routes ---
-
   // Auth
   app.post("/api/auth/register", async (req, res) => {
     const { email, password, name } = req.body;
     try {
       const hashedPassword = await bcrypt.hash(password, 10);
-      await dbQuery(
-        "INSERT INTO users (email, password, name) VALUES (?, ?, ?)",
-        [email, hashedPassword, name]
-      );
+      await dbQuery("INSERT INTO users (email, password, name) VALUES (?, ?, ?)", [email, hashedPassword, name]);
       res.status(201).json({ message: "User registered" });
     } catch (error: any) {
-      if (error.code === "ER_DUP_ENTRY") {
-        return res.status(400).json({ error: "Email already exists" });
-      }
+      if (error.code === "ER_DUP_ENTRY") return res.status(400).json({ error: "Email already exists" });
       res.status(500).json({ error: "Server error" });
     }
   });
@@ -233,10 +203,8 @@ async function startServer() {
       const rows: any = await dbQuery("SELECT * FROM users WHERE email = ?", [email]);
       const user = rows[0];
       if (!user) return res.status(400).json({ error: "User not found" });
-
       const validPassword = await bcrypt.compare(password, user.password);
       if (!validPassword) return res.status(400).json({ error: "Invalid password" });
-
       const token = jwt.sign({ id: user.id, email: user.email }, JWT_SECRET);
       res.json({ token, user: { id: user.id, email: user.email, name: user.name } });
     } catch (error) {
@@ -257,27 +225,48 @@ async function startServer() {
   app.post("/api/patients", authenticateToken, async (req: any, res) => {
     const { firstName, lastName, birthDate, pathology } = req.body;
     try {
-      const sql = "INSERT INTO patients (user_id, first_name, last_name, birth_date, pathology) VALUES (?, ?, ?, ?, ?)";
-      const params = [req.user.id, firstName, lastName, birthDate || null, pathology];
-      const result: any = await dbQuery(sql, params);
-      const insertId = result[0]?.insertId;
-      res.json({ id: insertId, ...req.body });
+      const result: any = await dbQuery(
+        "INSERT INTO patients (user_id, first_name, last_name, birth_date, pathology) VALUES (?, ?, ?, ?, ?)",
+        [req.user.id, firstName, lastName, birthDate || null, pathology]
+      );
+      res.json({ id: result[0]?.insertId, ...req.body });
     } catch (error: any) {
-      console.error("Erreur base de données lors de l'ajout du patient:", error);
-      res.status(500).json({ 
-        error: error.message || "Erreur serveur lors de l'ajout du patient",
-        details: error.code || error.toString()
-      });
+      res.status(500).json({ error: error.message || "Erreur serveur", details: error.code || error.toString() });
+    }
+  });
+
+  // PATCH patient — modifier les informations d'une fiche
+  app.patch("/api/patients/:patientId", authenticateToken, async (req: any, res) => {
+    const { patientId } = req.params;
+    const { firstName, lastName, birthDate, pathology } = req.body;
+    try {
+      await dbQuery(
+        "UPDATE patients SET first_name = ?, last_name = ?, birth_date = ?, pathology = ? WHERE id = ? AND user_id = ?",
+        [firstName, lastName, birthDate || null, pathology || null, patientId, req.user.id]
+      );
+      res.json({ success: true });
+    } catch (error: any) {
+      res.status(500).json({ error: "Erreur lors de la modification" });
+    }
+  });
+
+  // DELETE patient — supprime le patient et toutes ses données
+  app.delete("/api/patients/:patientId", authenticateToken, async (req: any, res) => {
+    const { patientId } = req.params;
+    try {
+      await dbQuery("DELETE FROM tasks WHERE patient_id = ? AND user_id = ?", [patientId, req.user.id]);
+      await dbQuery("DELETE FROM assessments WHERE patient_id = ? AND user_id = ?", [patientId, req.user.id]);
+      await dbQuery("DELETE FROM patients WHERE id = ? AND user_id = ?", [patientId, req.user.id]);
+      res.json({ success: true });
+    } catch (error: any) {
+      res.status(500).json({ error: "Erreur lors de la suppression" });
     }
   });
 
   // Tasks
   app.get("/api/patients/:patientId/tasks", authenticateToken, async (req: any, res) => {
     try {
-      const rows = await dbQuery(
-        "SELECT * FROM tasks WHERE patient_id = ? AND user_id = ?",
-        [req.params.patientId, req.user.id]
-      );
+      const rows = await dbQuery("SELECT * FROM tasks WHERE patient_id = ? AND user_id = ?", [req.params.patientId, req.user.id]);
       res.json(rows);
     } catch (error) {
       res.status(500).json({ error: "Server error" });
@@ -300,10 +289,7 @@ async function startServer() {
   app.patch("/api/tasks/:taskId", authenticateToken, async (req: any, res) => {
     const { completed } = req.body;
     try {
-      await dbQuery(
-        "UPDATE tasks SET completed = ? WHERE id = ? AND user_id = ?",
-        [completed ? 1 : 0, req.params.taskId, req.user.id]
-      );
+      await dbQuery("UPDATE tasks SET completed = ? WHERE id = ? AND user_id = ?", [completed ? 1 : 0, req.params.taskId, req.user.id]);
       res.json({ success: true });
     } catch (error) {
       res.status(500).json({ error: "Server error" });
@@ -312,10 +298,7 @@ async function startServer() {
 
   app.delete("/api/tasks/:taskId", authenticateToken, async (req: any, res) => {
     try {
-      await dbQuery(
-        "DELETE FROM tasks WHERE id = ? AND user_id = ?",
-        [req.params.taskId, req.user.id]
-      );
+      await dbQuery("DELETE FROM tasks WHERE id = ? AND user_id = ?", [req.params.taskId, req.user.id]);
       res.json({ success: true });
     } catch (error) {
       res.status(500).json({ error: "Server error" });
@@ -325,10 +308,7 @@ async function startServer() {
   // Assessments
   app.get("/api/patients/:patientId/assessments", authenticateToken, async (req: any, res) => {
     try {
-      const rows = await dbQuery(
-        "SELECT * FROM assessments WHERE patient_id = ? AND user_id = ?",
-        [req.params.patientId, req.user.id]
-      );
+      const rows = await dbQuery("SELECT * FROM assessments WHERE patient_id = ? AND user_id = ?", [req.params.patientId, req.user.id]);
       res.json(rows);
     } catch (error) {
       res.status(500).json({ error: "Server error" });
@@ -348,7 +328,7 @@ async function startServer() {
     }
   });
 
-  // Generic Data Route (for MDPH, CPAM, Documents, Assessment forms)
+  // Generic Data Route (MDPH, CPAM, Documents, Evaluations)
   app.get("/api/patients/:patientId/data/:type", authenticateToken, async (req: any, res) => {
     try {
       const rows: any = await dbQuery(
@@ -371,12 +351,8 @@ async function startServer() {
         "SELECT id FROM assessments WHERE patient_id = ? AND user_id = ? AND assessment_type = ?",
         [req.params.patientId, req.user.id, req.params.type]
       );
-
       if (existing.length > 0) {
-        await dbQuery(
-          "UPDATE assessments SET data = ? WHERE id = ?",
-          [JSON.stringify(data), existing[0].id]
-        );
+        await dbQuery("UPDATE assessments SET data = ? WHERE id = ?", [JSON.stringify(data), existing[0].id]);
         res.json({ success: true, id: existing[0].id });
       } else {
         const result: any = await dbQuery(
@@ -390,19 +366,16 @@ async function startServer() {
     }
   });
 
-  // File Upload Route — via Cloudinary (PDF, photos, documents)
+  // File Upload — Cloudinary
   app.post("/api/upload", authenticateToken, upload.single("file"), async (req: any, res) => {
     if (!req.file) return res.status(400).json({ error: "No file uploaded" });
-    
     try {
+      const isPdf = req.file.mimetype === 'application/pdf';
       const result = await cloudinary.uploader.upload(req.file.path, {
         folder: "dossier-ergo",
-        resource_type: "auto"
+        resource_type: isPdf ? "raw" : "image"
       });
-      
-      // Supprime le fichier temporaire local
       fs.unlinkSync(req.file.path);
-      
       res.json({ url: result.secure_url });
     } catch (error: any) {
       console.error("Cloudinary upload error:", error);
@@ -410,7 +383,7 @@ async function startServer() {
     }
   });
 
-  // --- Vite / Production Serving ---
+  // Vite / Production
   if (process.env.NODE_ENV !== "production") {
     const vite = await createViteServer({
       server: { middlewareMode: true },

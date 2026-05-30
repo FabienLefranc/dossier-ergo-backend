@@ -66,7 +66,7 @@ export default function DocumentManager({ patientId, userId, type }: DocumentMan
 
   const saveDocuments = async (newDocs: Document[]) => {
     await api.data.save(patientId, storageKey, newDocs);
-
+    setDocuments(newDocs);
   };
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>, category?: string) => {

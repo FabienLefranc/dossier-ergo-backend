@@ -142,7 +142,7 @@ export default function MdphDossier({ patientId, userId }: MdphDossierProps) {
       type,
       title,
       description: '',
-      status: 'draft',
+      status: 'in_progress',
       notes: [],
       photos: [],
       argumentairePdf: '',
@@ -165,6 +165,12 @@ export default function MdphDossier({ patientId, userId }: MdphDossierProps) {
   const handleUpdateItem = (itemId: string, updates: Partial<PchItem>) => {
     // Mise à jour locale uniquement — sauvegarde via bouton "Enregistrer"
     setItems(prev => prev.map(i => i.id === itemId ? { ...i, ...updates } : i));
+  };
+
+  const removePdf = async (itemId: string, field: keyof PchItem) => {
+    if (!confirm('Supprimer ce document ?')) return;
+    const newItems = items.map(i => i.id === itemId ? { ...i, [field]: '' } : i);
+    await saveItems(newItems);
   };
 
   const removePhoto = async (item: PchItem, photoUrl: string) => {
@@ -295,7 +301,7 @@ export default function MdphDossier({ patientId, userId }: MdphDossierProps) {
                   <div>
                     <h4 className="font-bold text-lg leading-none">{item.title}</h4>
                     <div className={`text-xs mt-1 font-medium ${expandedId === item.id ? 'text-white/60' : 'text-slate-400'}`}>
-                      {item.status === 'draft' ? 'Brouillon' : item.status === 'submitted' ? 'Dossier déposé' : 'En attente'}
+                      {item.status === 'draft' || item.status === 'in_progress' ? 'En cours' : item.status === 'submitted' ? 'Dossier déposé' : item.status === 'completed' ? 'Terminé' : 'En attente'}
                     </div>
                   </div>
                 </div>
@@ -330,6 +336,28 @@ export default function MdphDossier({ patientId, userId }: MdphDossierProps) {
                             className="w-full p-4 bg-slate-50 border border-slate-100 rounded-2xl text-sm min-h-[100px] outline-none focus:ring-2 focus:ring-apf-blue transition-all"
                             placeholder="Décrivez les spécificités de l'aide technique ou des travaux..."
                           />
+                          <div className="space-y-2">
+                            <label className="text-xs font-black uppercase tracking-widest text-slate-400 block">Statut du dossier</label>
+                            <div className="flex gap-2 flex-wrap">
+                              {[
+                                { value: 'in_progress', label: 'En cours', color: 'bg-blue-500' },
+                                { value: 'pending', label: 'En attente', color: 'bg-amber-500' },
+                                { value: 'completed', label: 'Terminé', color: 'bg-green-500' },
+                              ].map((s) => (
+                                <button
+                                  key={s.value}
+                                  onClick={() => handleUpdateItem(item.id, { status: s.value })}
+                                  className={`px-4 py-1.5 rounded-xl text-xs font-black uppercase tracking-wide transition-all ${
+                                    (item.status === s.value || (s.value === 'in_progress' && (item.status === 'draft' || !item.status)))
+                                      ? `${s.color} text-white shadow-sm`
+                                      : 'bg-slate-100 text-slate-400 hover:bg-slate-200'
+                                  }`}
+                                >
+                                  {s.label}
+                                </button>
+                              ))}
+                            </div>
+                          </div>
                         </div>
                         <div className="bg-slate-50 rounded-3xl p-8 border border-slate-200">
                           <h5 className="font-black text-slate-800 text-sm uppercase tracking-widest mb-8 flex items-center gap-2">
@@ -465,7 +493,7 @@ export default function MdphDossier({ patientId, userId }: MdphDossierProps) {
                                     (item.financials?.pchAmount || 0) - 
                                     (item.financials?.fdcAmount || 0) - 
                                     (item.financials?.solihaAmount || 0)
-                                  )} €
+                                  ).toFixed(2)} €
                                 </div>
                                 <div className="mt-3 pt-3 border-t border-slate-100">
                                   <div className="text-[9px] font-bold text-slate-400 uppercase mb-2 italic">Autres aides à solliciter ?</div>
@@ -510,26 +538,34 @@ export default function MdphDossier({ patientId, userId }: MdphDossierProps) {
                                 <div className="flex flex-col items-center">
                                   <span className="text-xs font-bold text-slate-600 uppercase tracking-tight">{docItem.label}</span>
                                   {isExisting && (
-                                    <a 
-                                      href={item[docItem.key] as string} 
-                                      target="_blank" 
-                                      rel="noreferrer"
-                                      className="text-[10px] text-apf-blue hover:underline mt-1 font-bold"
-                                      onClick={(e) => e.stopPropagation()}
-                                    >
-                                      VOIR LE DOCUMENT
-                                    </a>
+                                    <div className="flex flex-col items-center gap-1 mt-1">
+                                      <a 
+                                        href={item[docItem.key] as string} 
+                                        target="_blank" 
+                                        rel="noreferrer"
+                                        className="text-[10px] text-apf-blue hover:underline font-bold"
+                                        onClick={(e) => e.stopPropagation()}
+                                      >
+                                        VOIR LE DOCUMENT
+                                      </a>
+                                      <button
+                                        onClick={(e) => { e.stopPropagation(); removePdf(item.id, docItem.key); }}
+                                        className="text-[10px] text-rose-500 hover:underline font-bold flex items-center gap-1"
+                                      >
+                                        <Trash2 className="w-3 h-3" /> SUPPRIMER
+                                      </button>
+                                    </div>
                                   )}
                                 </div>
                                 <input 
                                   type="file" 
                                   accept=".pdf"
-                                  className="absolute inset-0 opacity-0 cursor-pointer" 
+                                  className={`absolute inset-0 opacity-0 ${isExisting ? 'hidden' : 'cursor-pointer'}`}
                                   onChange={(e) => {
                                     const file = e.target.files?.[0];
                                     if (file) handleFileUpload(item.id, docItem.key, file);
                                   }}
-                                  disabled={!!uploading}
+                                  disabled={!!uploading || !!isExisting}
                                 />
                               </div>
                             );
