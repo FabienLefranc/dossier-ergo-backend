@@ -107,6 +107,18 @@ async function ensureTables() {
         data TEXT NOT NULL,
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
         updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      )`,
+      `CREATE TABLE IF NOT EXISTS global_todos (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id INTEGER NOT NULL,
+        title TEXT NOT NULL,
+        completed BOOLEAN DEFAULT FALSE,
+        urgent BOOLEAN DEFAULT FALSE,
+        due_date TEXT,
+        category TEXT NOT NULL DEFAULT 'personal',
+        patient_id INTEGER,
+        patient_name TEXT,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
       )`
     ];
 
@@ -361,6 +373,48 @@ async function startServer() {
         );
         res.json({ success: true, id: result[0]?.insertId });
       }
+    } catch (error) {
+      res.status(500).json({ error: "Server error" });
+    }
+  });
+
+  // Global Todos
+  app.get("/api/global-todos", authenticateToken, async (req: any, res) => {
+    try {
+      const rows = await dbQuery("SELECT * FROM global_todos WHERE user_id = ? ORDER BY urgent DESC, due_date ASC, created_at DESC", [req.user.id]);
+      res.json(rows);
+    } catch (error) {
+      res.status(500).json({ error: "Server error" });
+    }
+  });
+
+  app.post("/api/global-todos", authenticateToken, async (req: any, res) => {
+    const { title, urgent, due_date, category, patient_id, patient_name } = req.body;
+    try {
+      const result: any = await dbQuery(
+        "INSERT INTO global_todos (user_id, title, urgent, due_date, category, patient_id, patient_name) VALUES (?, ?, ?, ?, ?, ?, ?)",
+        [req.user.id, title, urgent ? 1 : 0, due_date || null, category, patient_id || null, patient_name || null]
+      );
+      res.json({ id: result[0]?.insertId, ...req.body });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message || "Erreur serveur" });
+    }
+  });
+
+  app.patch("/api/global-todos/:todoId", authenticateToken, async (req: any, res) => {
+    const { completed } = req.body;
+    try {
+      await dbQuery("UPDATE global_todos SET completed = ? WHERE id = ? AND user_id = ?", [completed ? 1 : 0, req.params.todoId, req.user.id]);
+      res.json({ success: true });
+    } catch (error) {
+      res.status(500).json({ error: "Server error" });
+    }
+  });
+
+  app.delete("/api/global-todos/:todoId", authenticateToken, async (req: any, res) => {
+    try {
+      await dbQuery("DELETE FROM global_todos WHERE id = ? AND user_id = ?", [req.params.todoId, req.user.id]);
+      res.json({ success: true });
     } catch (error) {
       res.status(500).json({ error: "Server error" });
     }
