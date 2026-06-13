@@ -308,6 +308,16 @@ async function startServer() {
     }
   });
 
+  app.put("/api/tasks/:taskId", authenticateToken, async (req: any, res) => {
+    const { title } = req.body;
+    try {
+      await dbQuery("UPDATE tasks SET title = ? WHERE id = ? AND user_id = ?", [title, req.params.taskId, req.user.id]);
+      res.json({ success: true });
+    } catch (error) {
+      res.status(500).json({ error: "Server error" });
+    }
+  });
+
   app.delete("/api/tasks/:taskId", authenticateToken, async (req: any, res) => {
     try {
       await dbQuery("DELETE FROM tasks WHERE id = ? AND user_id = ?", [req.params.taskId, req.user.id]);

@@ -72,6 +72,14 @@ export const api = {
         throw new Error(err.error || 'Failed to update patient');
       }
       return res.json();
+    },
+    delete: async (id: string) => {
+      const res = await fetch(`${API_URL}/api/patients/${id}`, {
+        method: 'DELETE',
+        headers: getHeaders()
+      });
+      if (!res.ok) throw new Error('Failed to delete patient');
+      return res.json();
     }
   },
  
@@ -95,6 +103,15 @@ export const api = {
         method: 'PATCH',
         headers: getHeaders(),
         body: JSON.stringify({ completed })
+      });
+      if (!res.ok) throw new Error('Failed to update task');
+      return res.json();
+    },
+    update: async (taskId: any, title: string) => {
+      const res = await fetch(`${API_URL}/api/tasks/${taskId}`, {
+        method: 'PUT',
+        headers: getHeaders(),
+        body: JSON.stringify({ title })
       });
       if (!res.ok) throw new Error('Failed to update task');
       return res.json();
@@ -157,6 +174,39 @@ export const api = {
       if (!res.ok) throw new Error('Failed to upload file');
       return res.json();
     }
+  },
+
+  globalTodos: {
+    list: async () => {
+      const res = await fetch(`${API_URL}/api/global-todos`, { headers: getHeaders() });
+      if (!res.ok) throw new Error('Failed to fetch global todos');
+      return res.json();
+    },
+    create: async (data: { title: string; urgent: boolean; due_date: string | null; category: string; patient_id: string | null; patient_name: string | null }) => {
+      const res = await fetch(`${API_URL}/api/global-todos`, {
+        method: 'POST',
+        headers: getHeaders(),
+        body: JSON.stringify(data)
+      });
+      if (!res.ok) throw new Error('Failed to create global todo');
+      return res.json();
+    },
+    toggle: async (id: number, completed: boolean) => {
+      const res = await fetch(`${API_URL}/api/global-todos/${id}`, {
+        method: 'PATCH',
+        headers: getHeaders(),
+        body: JSON.stringify({ completed })
+      });
+      if (!res.ok) throw new Error('Failed to toggle global todo');
+      return res.json();
+    },
+    delete: async (id: number) => {
+      const res = await fetch(`${API_URL}/api/global-todos/${id}`, {
+        method: 'DELETE',
+        headers: getHeaders()
+      });
+      if (!res.ok) throw new Error('Failed to delete global todo');
+      return res.json();
+    }
   }
-};
- 
+ };

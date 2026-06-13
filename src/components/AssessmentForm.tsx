@@ -3,7 +3,6 @@ import {
   ChevronDown, 
   ChevronUp, 
   ClipboardCheck, 
-  FileText, 
   Printer, 
   Send, 
   User, 
@@ -63,12 +62,8 @@ export default function AssessmentForm({ patientId, userId }: AssessmentFormProp
   const [formData, setFormData] = useState<AssessmentData>({});
   const [expandedDomains, setExpandedDomains] = useState<string[]>(['general']);
   const [isGenerating, setIsGenerating] = useState(false);
-  const [isAnalyzingDocs, setIsAnalyzingDocs] = useState(false);
-  const [showAutoFillModal, setShowAutoFillModal] = useState(false);
-  const [synthesis, setSynthesis] = useState<Synthesis | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [lastSaved, setLastSaved] = useState<Date | null>(null);
   const [showResetConfirm, setShowResetConfirm] = useState(false);
+  const [synthesis, setSynthesis] = useState<Synthesis | null>(null);
   const [loading, setLoading] = useState(true);
   const [toast, setToast] = useState<{ message: string, type: 'success' | 'error' } | null>(null);
   const synthesisRef = useRef<HTMLDivElement>(null);
@@ -211,98 +206,6 @@ export default function AssessmentForm({ patientId, userId }: AssessmentFormProp
     }
   };
 
-  const handleAutoFill = async (files: FileList | null, pastedText: string) => {
-    if ((!files || files.length === 0) && !pastedText.trim()) {
-      showToast("Veuillez fournir un document ou du texte.", "error");
-      return;
-    }
-
-    setIsAnalyzingDocs(true);
-    setError(null);
-    
-    try {
-      const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || '' });
-      
-      const prompt = `
-        Tu es un assistant expert pour ergothérapeute. Analyse les documents fournis (comptes-rendus, notes, etc.) 
-        et extrais les informations pour remplir un formulaire d'évaluation ergothérapique structuré.
-        
-        Voici la liste des questions (ID et Libellé) attendues :
-        ${ASSESSMENT_DOMAINS.map(d => d.questions.map(q => `- ID: ${q.id}, Label: ${q.label}`).join('\n')).join('\n')}
-        
-        Pour chaque question, détermine :
-        1. La valeur (Oui/Non pour type yes_no, ou Facile/Moyen/Difficile/Impossible/NC pour type difficulty).
-        2. Un commentaire explicatif basé sur les documents.
-        
-        Réponds UNIQUEMENT par un objet JSON au format suivant :
-        {
-          "question_id": { "value": "valeur_trouvée", "comment": "commentaire_extrait" }
-        }
-        
-        Si une information n'est pas trouvée pour une question précise, ne l'inclus pas dans le JSON.
-        Sois précis et professionnel dans les commentaires.
-      `;
-
-      const parts: any[] = [{ text: prompt }];
-
-      if (pastedText.trim()) {
-        parts.push({ text: `TEXTE COPIÉ :\n${pastedText}` });
-      }
-
-      if (files) {
-        for (let i = 0; i < files.length; i++) {
-          const file = files[i];
-          if (file.size > 10 * 1024 * 1024) {
-            showToast(`Le fichier ${file.name} est trop volumineux.`, "error");
-            continue;
-          }
-          const base64 = await fileToBase64(file);
-          parts.push({
-            inlineData: {
-              data: base64,
-              mimeType: file.type || 'application/pdf'
-            }
-          });
-        }
-      }
-
-      const response = await ai.models.generateContent({
-        model: "gemini-3.1-pro-preview",
-        contents: [{ parts }],
-        config: {
-          responseMimeType: "application/json"
-        }
-      });
-
-      const responseText = response.text || '';
-      if (!responseText) throw new Error("Réponse vide de l'IA");
-      
-      const result = JSON.parse(cleanJsonString(responseText));
-      const newFormData = { ...formData, ...result };
-      setFormData(newFormData);
-      saveData(newFormData, synthesis);
-      setShowAutoFillModal(false);
-      showToast("Formulaire pré-rempli !");
-    } catch (err) {
-      console.error(err);
-      showToast("Erreur lors de l'analyse.", "error");
-    } finally {
-      setIsAnalyzingDocs(false);
-    }
-  };
-
-  const fileToBase64 = (file: File): Promise<string> => {
-    return new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.readAsDataURL(file);
-      reader.onload = () => {
-        const base64String = (reader.result as string).split(',')[1];
-        resolve(base64String);
-      };
-      reader.onerror = error => reject(error);
-    });
-  };
-
   const getDomainIcon = (id: string) => {
     switch (id) {
       case 'general': return <User className="w-5 h-5" />;
@@ -346,13 +249,6 @@ export default function AssessmentForm({ patientId, userId }: AssessmentFormProp
         <div className="flex-1 space-y-6">
           <div className="flex items-center justify-between mb-2 print:hidden">
             <div className="flex gap-2">
-              <button 
-                onClick={() => setShowAutoFillModal(true)}
-                className="flex items-center gap-2 bg-apf-blue/10 text-apf-blue-dark px-4 py-2 rounded-xl text-sm font-bold border border-apf-blue/20 hover:bg-apf-blue/20 transition-all"
-              >
-                <FileText className="w-4 h-4" />
-                Auto-remplissage IA
-              </button>
             </div>
             <div className="flex gap-2">
                <button onClick={handleReset} className="p-2 text-slate-400 hover:text-rose-600 transition-colors"><RotateCcw className="w-5 h-5" /></button>
@@ -511,95 +407,6 @@ export default function AssessmentForm({ patientId, userId }: AssessmentFormProp
                   className="flex-1 px-4 py-2 rounded-lg font-medium text-white bg-rose-600 hover:bg-rose-700 transition-colors"
                 >
                   Confirmer
-                </button>
-              </div>
-            </motion.div>
-          </div>
-        )}
-      </AnimatePresence>
-
-      {/* AutoFill Modal */}
-      <AnimatePresence>
-        {showAutoFillModal && (
-          <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-md z-50 flex items-center justify-center p-4">
-            <motion.div 
-              initial={{ scale: 0.9, opacity: 0, y: 20 }}
-              animate={{ scale: 1, opacity: 1, y: 0 }}
-              exit={{ scale: 0.9, opacity: 0, y: 20 }}
-              className="bg-white rounded-3xl p-8 max-w-2xl w-full shadow-2xl space-y-6 overflow-hidden"
-            >
-              <div className="flex justify-between items-start">
-                <div className="space-y-1">
-                  <h3 className="text-2xl font-black text-slate-800">Auto-remplissage IA</h3>
-                  <p className="text-slate-500 text-sm">Importez des documents (PDF, rapports) ou collez du texte.</p>
-                </div>
-                <button onClick={() => setShowAutoFillModal(false)} className="p-2 hover:bg-slate-100 rounded-full transition-colors">
-                  <RotateCcw className="w-5 h-5 text-slate-400 rotate-45" />
-                </button>
-              </div>
-
-              <div className="space-y-4">
-                <div className="border-2 border-dashed border-slate-200 rounded-2xl p-8 text-center hover:border-apf-blue transition-colors group relative">
-                  <input 
-                    type="file" 
-                    multiple 
-                    accept="application/pdf,image/*,text/plain"
-                    className="absolute inset-0 opacity-0 cursor-pointer"
-                    onChange={(e) => {
-                      const files = e.target.files;
-                      if (files && files.length > 0) {
-                        handleAutoFill(files, "");
-                      }
-                    }}
-                    disabled={isAnalyzingDocs}
-                  />
-                  <div className="bg-apf-blue/10 w-16 h-16 rounded-2xl flex items-center justify-center mx-auto mb-4 group-hover:scale-110 transition-transform">
-                    <FileText className="text-apf-blue w-8 h-8" />
-                  </div>
-                  <p className="text-sm font-bold text-slate-700">Cliquez pour importer des fichiers</p>
-                  <p className="text-xs text-slate-400 mt-1">PDF, Comptes-rendus, notes de visite...</p>
-                </div>
-
-                <div className="flex items-center gap-4 text-slate-300">
-                  <div className="h-px bg-slate-100 flex-1" />
-                  <span className="text-[10px] font-black uppercase tracking-widest bg-white px-2">Ou</span>
-                  <div className="h-px bg-slate-100 flex-1" />
-                </div>
-
-                <textarea 
-                  id="pastedText"
-                  placeholder="Collez ici le contenu d'un compte-rendu ou des notes cliniques..."
-                  className="w-full p-4 bg-slate-50 border border-slate-100 rounded-2xl text-sm focus:ring-2 focus:ring-apf-blue outline-none min-h-[120px] shadow-inner"
-                />
-              </div>
-
-              <div className="flex gap-3 pt-4">
-                <button 
-                  onClick={() => setShowAutoFillModal(false)}
-                  className="flex-1 px-6 py-3 rounded-xl font-bold text-slate-600 bg-slate-100 hover:bg-slate-200 transition-all"
-                  disabled={isAnalyzingDocs}
-                >
-                  Annuler
-                </button>
-                <button 
-                  onClick={() => {
-                    const text = (document.getElementById('pastedText') as HTMLTextAreaElement).value;
-                    handleAutoFill(null, text);
-                  }}
-                  disabled={isAnalyzingDocs}
-                  className="flex-[2] flex items-center justify-center gap-2 bg-apf-blue hover:bg-apf-blue-dark disabled:bg-slate-200 text-white px-6 py-3 rounded-xl font-bold transition-all shadow-lg shadow-apf-blue/20"
-                >
-                  {isAnalyzingDocs ? (
-                    <>
-                      <Loader2 className="w-5 h-5 animate-spin" />
-                      <span>Analyse en cours...</span>
-                    </>
-                  ) : (
-                    <>
-                      <Send className="w-5 h-5" />
-                      <span>Lancer l'analyse</span>
-                    </>
-                  )}
                 </button>
               </div>
             </motion.div>

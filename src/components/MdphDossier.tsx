@@ -19,7 +19,8 @@ import {
   Clock,
   AlertCircle,
   FolderOpen,
-  Save
+  Save,
+  Pencil
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { api } from '../lib/api';
@@ -40,6 +41,12 @@ interface Financials {
   otherAids: string;
 }
 
+interface ExistingAid {
+  id: string;
+  name: string;
+  description: string;
+}
+
 interface PchItem {
   id: string;
   type: 'technical_aid' | 'housing' | 'vehicle' | 'other';
@@ -54,6 +61,7 @@ interface PchItem {
   devis1Pdf: string;
   devis2Pdf: string;
   financials: Financials;
+  existingAids: ExistingAid[];
 }
 
 interface MdphDossierProps {
@@ -70,6 +78,8 @@ export default function MdphDossier({ patientId, userId }: MdphDossierProps) {
   const [editingNote, setEditingNote] = useState<{ itemId: string, index: number, text: string } | null>(null);
   const [saving, setSaving] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
+  const [newAid, setNewAid] = useState<{ itemId: string; name: string; description: string } | null>(null);
+  const [editingAid, setEditingAid] = useState<{ itemId: string; aid: ExistingAid } | null>(null);
 
   const fetchItems = async () => {
     try {
@@ -181,7 +191,7 @@ export default function MdphDossier({ patientId, userId }: MdphDossierProps) {
 
   const addNote = async (item: PchItem) => {
     if (!newNote.trim()) return;
-    const notes = [...(item.notes || []), { date: new Date().toISOString(), text: newNote }];
+    const notes = [{ date: new Date().toISOString(), text: newNote }, ...(item.notes || [])];
     const newItems = items.map(i => i.id === item.id ? { ...i, notes } : i);
     await saveItems(newItems);
     setNewNote('');
@@ -199,6 +209,36 @@ export default function MdphDossier({ patientId, userId }: MdphDossierProps) {
     if (!confirm('Supprimer ce commentaire ?')) return;
     const notes = item.notes.filter((_, i) => i !== index);
     const newItems = items.map(i => i.id === item.id ? { ...i, notes } : i);
+    await saveItems(newItems);
+  };
+
+  const addExistingAid = async (itemId: string) => {
+    if (!newAid || !newAid.name.trim()) return;
+    const item = items.find(i => i.id === itemId);
+    if (!item) return;
+    const aid: ExistingAid = { id: Date.now().toString(), name: newAid.name, description: newAid.description };
+    const existingAids = [...(item.existingAids || []), aid];
+    const newItems = items.map(i => i.id === itemId ? { ...i, existingAids } : i);
+    await saveItems(newItems);
+    setNewAid(null);
+  };
+
+  const updateExistingAid = async (itemId: string) => {
+    if (!editingAid) return;
+    const item = items.find(i => i.id === itemId);
+    if (!item) return;
+    const existingAids = (item.existingAids || []).map(a => a.id === editingAid.aid.id ? editingAid.aid : a);
+    const newItems = items.map(i => i.id === itemId ? { ...i, existingAids } : i);
+    await saveItems(newItems);
+    setEditingAid(null);
+  };
+
+  const deleteExistingAid = async (itemId: string, aidId: string) => {
+    if (!confirm('Supprimer cette aide ?')) return;
+    const item = items.find(i => i.id === itemId);
+    if (!item) return;
+    const existingAids = (item.existingAids || []).filter(a => a.id !== aidId);
+    const newItems = items.map(i => i.id === itemId ? { ...i, existingAids } : i);
     await saveItems(newItems);
   };
 
@@ -355,6 +395,97 @@ export default function MdphDossier({ patientId, userId }: MdphDossierProps) {
                                 >
                                   {s.label}
                                 </button>
+                              ))}
+                            </div>
+                          </div>
+
+                          {/* Encart aides techniques déjà possédées */}
+                          <div className="space-y-3 pt-2">
+                            <div className="flex items-center justify-between">
+                              <label className="text-xs font-black uppercase tracking-widest text-slate-400">Aides déjà possédées</label>
+                              <button
+                                onClick={() => setNewAid({ itemId: item.id, name: '', description: '' })}
+                                className="flex items-center gap-1 text-xs font-bold text-apf-blue hover:bg-apf-blue/10 px-2.5 py-1.5 rounded-xl transition-all"
+                              >
+                                <Plus className="w-3.5 h-3.5" /> Ajouter
+                              </button>
+                            </div>
+
+                            {/* Formulaire ajout */}
+                            {newAid?.itemId === item.id && (
+                              <div className="bg-slate-50 border border-slate-200 rounded-2xl p-4 space-y-2">
+                                <input
+                                  type="text"
+                                  placeholder="Nom de l'aide (ex: fauteuil roulant manuel...)"
+                                  value={newAid.name}
+                                  onChange={e => setNewAid({ ...newAid, name: e.target.value })}
+                                  className="w-full p-2.5 bg-white border border-slate-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-apf-blue"
+                                />
+                                <input
+                                  type="text"
+                                  placeholder="Précisions (marque, modèle, état...)"
+                                  value={newAid.description}
+                                  onChange={e => setNewAid({ ...newAid, description: e.target.value })}
+                                  className="w-full p-2.5 bg-white border border-slate-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-apf-blue"
+                                />
+                                <div className="flex gap-2 pt-1">
+                                  <button onClick={() => setNewAid(null)} className="flex-1 py-2 rounded-xl text-sm font-bold text-slate-500 bg-white border border-slate-200">Annuler</button>
+                                  <button onClick={() => addExistingAid(item.id)} className="flex-[2] py-2 rounded-xl text-sm font-bold text-white bg-apf-blue">Ajouter</button>
+                                </div>
+                              </div>
+                            )}
+
+                            {/* Liste des aides */}
+                            {(item.existingAids || []).length === 0 && !newAid && (
+                              <p className="text-xs text-slate-400 italic">Aucune aide renseignée pour le moment.</p>
+                            )}
+                            <div className="space-y-2">
+                              {(item.existingAids || []).map(aid => (
+                                <div key={aid.id}>
+                                  {editingAid?.aid.id === aid.id && editingAid?.itemId === item.id ? (
+                                    <div className="bg-slate-50 border border-apf-blue/20 rounded-2xl p-3 space-y-2">
+                                      <input
+                                        type="text"
+                                        value={editingAid.aid.name}
+                                        onChange={e => setEditingAid({ ...editingAid, aid: { ...editingAid.aid, name: e.target.value } })}
+                                        className="w-full p-2.5 bg-white border border-slate-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-apf-blue"
+                                      />
+                                      <input
+                                        type="text"
+                                        value={editingAid.aid.description}
+                                        onChange={e => setEditingAid({ ...editingAid, aid: { ...editingAid.aid, description: e.target.value } })}
+                                        className="w-full p-2.5 bg-white border border-slate-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-apf-blue"
+                                      />
+                                      <div className="flex gap-2">
+                                        <button onClick={() => setEditingAid(null)} className="flex-1 py-1.5 rounded-xl text-xs font-bold text-slate-500 bg-white border border-slate-200">Annuler</button>
+                                        <button onClick={() => updateExistingAid(item.id)} className="flex-[2] py-1.5 rounded-xl text-xs font-bold text-white bg-apf-blue">Enregistrer</button>
+                                      </div>
+                                    </div>
+                                  ) : (
+                                    <div className="flex items-start gap-2 bg-white border border-slate-100 rounded-2xl p-3">
+                                      <div className="flex-1 min-w-0">
+                                        <p className="text-sm font-bold text-slate-700">{aid.name}</p>
+                                        {aid.description && <p className="text-xs text-slate-400 mt-0.5">{aid.description}</p>}
+                                      </div>
+                                      <div className="flex gap-1 flex-shrink-0">
+                                        <button
+                                          onClick={() => setEditingAid({ itemId: item.id, aid })}
+                                          className="p-1.5 text-slate-300 hover:text-apf-blue hover:bg-apf-blue/10 rounded-lg transition-all"
+                                          title="Modifier"
+                                        >
+                                          <Pencil className="w-3.5 h-3.5" />
+                                        </button>
+                                        <button
+                                          onClick={() => deleteExistingAid(item.id, aid.id)}
+                                          className="p-1.5 text-slate-300 hover:text-red-400 hover:bg-red-50 rounded-lg transition-all"
+                                          title="Supprimer"
+                                        >
+                                          <Trash2 className="w-3.5 h-3.5" />
+                                        </button>
+                                      </div>
+                                    </div>
+                                  )}
+                                </div>
                               ))}
                             </div>
                           </div>

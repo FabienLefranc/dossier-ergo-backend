@@ -6,7 +6,10 @@ import {
   Trash2, 
   Loader2, 
   ListTodo,
-  AlertCircle
+  AlertCircle,
+  Pencil,
+  Check,
+  X
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { api } from '../lib/api';
@@ -28,6 +31,7 @@ export default function TodoList({ patientId, userId }: TodoListProps) {
   const [loading, setLoading] = useState(true);
   const [newTaskTitle, setNewTaskTitle] = useState('');
   const [isAdding, setIsAdding] = useState(false);
+  const [editingTask, setEditingTask] = useState<{ id: any; title: string } | null>(null);
 
   const fetchTasks = async () => {
     try {
@@ -76,6 +80,17 @@ export default function TodoList({ patientId, userId }: TodoListProps) {
       fetchTasks();
     } catch (error) {
       console.error("Error deleting task:", error);
+    }
+  };
+
+  const updateTask = async () => {
+    if (!editingTask || !editingTask.title.trim()) return;
+    try {
+      await api.tasks.update(editingTask.id, editingTask.title.trim());
+      setEditingTask(null);
+      fetchTasks();
+    } catch (error) {
+      console.error("Error updating task:", error);
     }
   };
 
@@ -137,23 +152,51 @@ export default function TodoList({ patientId, userId }: TodoListProps) {
                 task.completed ? 'border-slate-100 opacity-60' : 'border-slate-200 shadow-sm'
               }`}
             >
-              <button 
-                onClick={() => toggleTask(task)}
-                className={`transition-colors ${task.completed ? 'text-apf-orange' : 'text-slate-300 hover:text-apf-blue'}`}
-              >
-                {task.completed ? <CheckCircle2 className="w-6 h-6" /> : <Circle className="w-6 h-6" />}
-              </button>
-              
-              <span className={`flex-1 font-medium text-slate-800 transition-all ${task.completed ? 'line-through text-slate-400' : ''}`}>
-                {task.title}
-              </span>
+              {editingTask?.id === task.id ? (
+                <>
+                  <input
+                    autoFocus
+                    type="text"
+                    value={editingTask.title}
+                    onChange={e => setEditingTask({ ...editingTask, title: e.target.value })}
+                    onKeyDown={e => { if (e.key === 'Enter') updateTask(); if (e.key === 'Escape') setEditingTask(null); }}
+                    className="flex-1 p-2 bg-slate-50 border border-apf-blue/30 rounded-xl text-sm outline-none focus:ring-2 focus:ring-apf-blue font-medium"
+                  />
+                  <button onClick={updateTask} className="p-2 text-green-500 hover:bg-green-50 rounded-lg transition-all">
+                    <Check className="w-4 h-4" />
+                  </button>
+                  <button onClick={() => setEditingTask(null)} className="p-2 text-slate-300 hover:text-slate-500 hover:bg-slate-100 rounded-lg transition-all">
+                    <X className="w-4 h-4" />
+                  </button>
+                </>
+              ) : (
+                <>
+                  <button 
+                    onClick={() => toggleTask(task)}
+                    className={`transition-colors ${task.completed ? 'text-apf-orange' : 'text-slate-300 hover:text-apf-blue'}`}
+                  >
+                    {task.completed ? <CheckCircle2 className="w-6 h-6" /> : <Circle className="w-6 h-6" />}
+                  </button>
+                  
+                  <span className={`flex-1 font-medium text-slate-800 transition-all ${task.completed ? 'line-through text-slate-400' : ''}`}>
+                    {task.title}
+                  </span>
 
-              <button 
-                onClick={() => deleteTask(task.id)}
-                className="p-2 text-slate-300 hover:text-rose-500 hover:bg-rose-50 rounded-lg transition-all"
-              >
-                <Trash2 className="w-4 h-4" />
-              </button>
+                  <button
+                    onClick={() => setEditingTask({ id: task.id, title: task.title })}
+                    className="p-2 text-slate-300 hover:text-apf-blue hover:bg-apf-blue/10 rounded-lg transition-all"
+                  >
+                    <Pencil className="w-4 h-4" />
+                  </button>
+
+                  <button 
+                    onClick={() => deleteTask(task.id)}
+                    className="p-2 text-slate-300 hover:text-rose-500 hover:bg-rose-50 rounded-lg transition-all"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </button>
+                </>
+              )}
             </motion.div>
           ))}
         </AnimatePresence>

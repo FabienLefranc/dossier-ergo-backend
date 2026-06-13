@@ -13,7 +13,8 @@ import {
   Pencil,
   X,
   Check,
-  ArrowUpDown
+  ArrowUpDown,
+  Trash2
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { api } from '../lib/api';
@@ -100,6 +101,17 @@ export default function PatientList({ userId, onSelectPatient }: PatientListProp
       console.error("Error adding patient:", error);
       const detail = error.details ? ` (${error.details})` : '';
       alert(`Erreur lors de l'enregistrement : ${error.message}${detail}.`);
+    }
+  };
+
+  const handleDeletePatient = async (patient: Patient, e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!window.confirm(`Supprimer la fiche de ${patient.firstName} ${patient.lastName} ? Cette action est irréversible.`)) return;
+    try {
+      await api.patients.delete(patient.id);
+      fetchPatients();
+    } catch (error: any) {
+      alert(`Erreur lors de la suppression : ${error.message}`);
     }
   };
 
@@ -342,13 +354,22 @@ export default function PatientList({ userId, onSelectPatient }: PatientListProp
                       <div className="w-10 h-10 sm:w-12 sm:h-12 bg-apf-blue/10 rounded-xl sm:rounded-2xl flex items-center justify-center text-apf-blue group-hover:scale-110 transition-transform">
                         <User className="w-5 h-5 sm:w-6 sm:h-6" />
                       </div>
-                      <button
-                        onClick={(e) => { e.stopPropagation(); setEditingPatient(patient); }}
-                        className="p-2 rounded-xl text-slate-300 hover:text-apf-blue hover:bg-apf-blue/10 transition-all opacity-0 group-hover:opacity-100"
-                        title="Modifier la fiche"
-                      >
-                        <Pencil className="w-4 h-4" />
-                      </button>
+                      <div className="flex items-center gap-1">
+                        <button
+                          onClick={(e) => { e.stopPropagation(); setEditingPatient(patient); }}
+                          className="p-2 rounded-xl text-slate-300 hover:text-apf-blue hover:bg-apf-blue/10 transition-all opacity-0 group-hover:opacity-100"
+                          title="Modifier la fiche"
+                        >
+                          <Pencil className="w-4 h-4" />
+                        </button>
+                        <button
+                          onClick={(e) => handleDeletePatient(patient, e)}
+                          className="p-2 rounded-xl text-slate-300 hover:text-red-500 hover:bg-red-50 transition-all opacity-0 group-hover:opacity-100"
+                          title="Supprimer la fiche"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
                     </div>
                     
                     <div>
